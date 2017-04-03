@@ -88,6 +88,9 @@ Map.prototype = {
   deselect_nodes: deselect_nodes,
   select_text_label: select_text_label,
   deselect_text_labels: deselect_text_labels,
+  align_vertical: align_vertical,
+  align_horizontal: align_horizontal,
+  make_circle: make_circle,
   // build
   new_reaction_from_scratch: new_reaction_from_scratch,
   extend_nodes: extend_nodes,
@@ -509,7 +512,8 @@ function set_status (status, time) {
     }.bind(this), time)
   }
 }
-function clear_map() {
+
+function clear_map () {
   this.reactions = {}
   this.beziers = {}
   this.nodes = {}
@@ -523,14 +527,16 @@ function clear_map() {
   this.apply_gene_data_to_map(null)
   this.draw_everything()
 }
-function has_cobra_model() {
-  return (this.cobra_model !== null)
-}
-function draw_everything() {
-  /** Draw the all reactions, nodes, & text labels.
 
-   */
-  this.draw_all_reactions(true, true); // also draw beziers
+function has_cobra_model () {
+  return this.cobra_model !== null
+}
+
+/**
+ * Draw the all reactions, nodes, & text labels.
+ */
+function draw_everything () {
+  this.draw_all_reactions(true, true) // also draw beziers
   this.draw_all_nodes(true)
   this.draw_all_text_labels()
 }
@@ -559,12 +565,14 @@ function draw_all_reactions(draw_beziers, clear_deleted) {
   // If draw_beziers is true, just draw them all, rather than deciding
   // which ones to draw.
   this.draw_these_reactions(reaction_ids, false)
-  if (draw_beziers && this.beziers_enabled)
+  if (draw_beziers && this.beziers_enabled) {
     this.draw_all_beziers()
+  }
 
   // Clear all deleted reactions.
-  if (clear_deleted)
+  if (clear_deleted) {
     this.clear_deleted_reactions(draw_beziers)
+  }
 }
 
 /**
@@ -747,23 +755,17 @@ function draw_all_beziers () {
   this.clear_deleted_beziers()
 }
 
-function draw_these_beziers(bezier_ids) {
-  /** Draw specific beziers.
-
-      Does nothing with exit selection. Use clear_deleted_beziers to remove
-      beziers from the DOM.
-
-      Arguments
-      ---------
-
-      beziers_ids: An array of bezier_ids to update.
-
-  */
-  // find reactions for reaction_ids
+/**
+ * Draw specific beziers. Does nothing with exit selection. Use
+ * clear_deleted_beziers to remove beziers from the DOM.
+ * beziers_ids: An array of bezier_ids to update.
+ */
+function draw_these_beziers (bezier_ids) {
+  // Find reactions for reaction_ids
   var bezier_subset = utils.object_slice_for_ids_ref(this.beziers, bezier_ids)
 
-  // function to update beziers
-  var update_fn = function(sel) {
+  // Function to update beziers
+  var update_fn = function (sel) {
     return this.draw.update_bezier(sel,
                                    this.beziers_enabled,
                                    this.behavior.bezier_drag,
@@ -773,20 +775,20 @@ function draw_these_beziers(bezier_ids) {
                                    this.reactions)
   }.bind(this)
 
-  // draw the beziers
+  // Draw the beziers
   utils.draw_an_object(this.sel, '#beziers', '.bezier', bezier_subset,
                        'bezier_id', this.draw.create_bezier.bind(this.draw),
                        update_fn)
 }
 
-function clear_deleted_beziers() {
-  /** Remove any beziers that are not in *this.beziers*.
-
-   */
-  // remove deleted
+/**
+ * Remove any beziers that are not in *this.beziers*.
+ */
+function clear_deleted_beziers () {
+  // Remove deleted
   utils.draw_an_object(this.sel, '#beziers', '.bezier', this.beziers,
                        'bezier_id', null, null,
-                       function(sel) { sel.remove(); })
+                       function (sel) { sel.remove() })
 }
 
 function show_beziers () {
@@ -1135,6 +1137,93 @@ function deselect_text_labels () {
   text_label_selection.classed('selected', false)
 }
 
+function not_implemented () {
+  throw new Error('Not Implemented')
+  return
+}
+
+/**
+ * Align selected nodes and/or reactions vertically. Undoable.
+ *
+ * TODO make undoable
+ * TODO test edge cases:
+ * - connected secondary metabolites
+ * -
+ */
+function align_vertical () {
+  var selected = this.get_selected_nodes()
+  // Get markers
+  var markers = {}
+  for (var id in selected) {
+    var node = selected[id]
+    if (node.node_type !== 'metabolite' || node.node_is_primary) {
+      markers[id] = node
+    }
+  }
+  // Align all nodes if just metabolites are selected
+  var align_by_reaction = Object.keys(markers).length > 0
+  var to_align = align_by_reaction ? markers : selected
+  var keys_to_align = Object.keys(to_align)
+  // Get new x location
+  var mean_x = keys_to_align.reduce(function (accum, val) {
+    return accum + to_align[val].x
+  }, 0) / keys_to_align.length
+  // Align
+  for (var id in to_align) {
+    var marker = to_align[id]
+    var x_diff = marker.x - mean_x
+
+    // Align markers
+    marker.x = mean_x
+    marker.label_x -= x_diff
+
+    // Align unconnected secondary metabolites
+    if (align_by_reaction) {
+      marker.connected_segments.map(function (segment) {
+        var seg = this.reactions[segment.reaction_id].segments[segment.segment_id]
+        var is_to_node = seg.to_node_id === marker.node_id
+        var other_node_id = is_to_node ? seg.from_node_id : seg.to_node_id
+
+        if (other_node_id in selected) {
+          var other_node = this.nodes[other_node_id]
+          if (other_node.node_type === 'metabolite' &&
+              !other_node.node_is_primary) {
+            other_node.x -= x_diff
+            other_node.label_x -= x_diff
+          }
+        }
+
+        // Align connected bezier(s)
+        var bez = is_to_node ? 'b2' : 'b1'
+        // TODO LEFT OFF
+        if (seg[bez] !== null) {
+          seg[bez].x -= x_diff
+          var bezier_id = build.bezier_id_for_segment_id(segment.segment_id, bez)
+          this.beziers[bezier_id].x = seg[bez].x
+        }
+      }.bind(this))
+    }
+
+    this.set_status(align_by_reaction ? 'Aligned reactions' : 'Aligned nodes',
+                    2000)
+  }
+  this.draw_everything()
+}
+
+/**
+ * Align selected nodes and/or reactions horizontally.
+ */
+function align_horizontal () {
+  var selected = this.get_selected_nodes()
+}
+
+/**
+ * Make selected reactions that form a loop into a circle.
+ */
+function make_circle () {
+  var selected = this.get_selected_nodes()
+}
+
 // ---------------------------------------------------------------------
 // Delete
 // ---------------------------------------------------------------------
@@ -1318,7 +1407,8 @@ function delete_segment_data (segment_objs) {
     }.bind(this))
 
     // remove beziers
-    ;['b1', 'b2'].forEach(function(bez) {
+    var bezs = [ 'b1', 'b2' ]
+    bezs.forEach(function (bez) {
       var bez_id = build.bezier_id_for_segment_id(segment_obj.segment_id, bez)
       delete this.beziers[bez_id]
     }.bind(this))
@@ -1332,11 +1422,12 @@ function delete_segment_data (segment_objs) {
  * index.
  */
 function delete_reaction_data (reaction_ids) {
-  reaction_ids.forEach(function(reaction_id) {
+  reaction_ids.forEach(function (reaction_id) {
     // remove beziers
     var reaction = this.reactions[reaction_id]
     for (var segment_id in reaction.segments) {
-      ;['b1', 'b2'].forEach(function(bez) {
+      var bezs = [ 'b1', 'b2' ]
+      bezs.forEach(function (bez) {
         var bez_id = build.bezier_id_for_segment_id(segment_id, bez)
         delete this.beziers[bez_id]
       }.bind(this))

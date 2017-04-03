@@ -897,6 +897,10 @@ function _set_up_menu (menu_selection, map, key_manager, keys, enable_editing,
                 key_text: (enable_keys ? ' (Ctrl+Shift+A)' : null) })
       .button({ key: keys.invert_selection,
                 text: 'Invert selection' })
+      .divider()
+      .button({ key: keys.align_vertical, text: 'Align vertical' })
+      .button({ key: keys.align_horizontal, text: 'Align horizontal' })
+      .button({ key: keys.make_circle, text: 'Make circle' })
   } else {
     edit_menu.button({ key: keys.view_mode,
                        id: 'view-mode-menu-button',
@@ -1493,6 +1497,9 @@ function _get_keys (map, zoom_container, search_bar, settings_bar, enable_editin
         target: map,
         fn: map.invert_selection,
       },
+      align_vertical: { target: map, fn: map.align_vertical },
+      align_horizontal: { target: map, fn: map.align_horizontal },
+      make_circle: { target: map, fn: map.make_circle },
     })
   }
   return keys

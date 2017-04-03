@@ -705,10 +705,15 @@ function _get_selectable_drag (map, undo_stack) {
   }
 }
 
+/**
+ * Create the behavior for dragging bezier control points.
+ */
 function _get_bezier_drag (map) {
   var move_bezier = function (reaction_id, segment_id, bez, bezier_id,
                               displacement) {
     var segment = map.reactions[reaction_id].segments[segment_id]
+    // Keep track of the beziers in two places.
+    // TODO Ensure that these are linked some other way.
     segment[bez] = utils.c_plus_c(segment[bez], displacement)
     map.beziers[bezier_id].x = segment[bez].x
     map.beziers[bezier_id].y = segment[bez].y
@@ -720,8 +725,8 @@ function _get_bezier_drag (map) {
     // draw
     move_bezier(d.reaction_id, d.segment_id, d.bezier, d.bezier_id,
                 displacement)
-    map.draw_these_reactions([d.reaction_id], false)
-    map.draw_these_beziers([d.bezier_id])
+    map.draw_these_reactions([ d.reaction_id ], false)
+    map.draw_these_beziers([ d.bezier_id ])
   }
   var end_fn = function (d) {
     d.dragging = false
@@ -729,14 +734,14 @@ function _get_bezier_drag (map) {
   var undo_fn = function (d, displacement) {
     move_bezier(d.reaction_id, d.segment_id, d.bezier, d.bezier_id,
                 utils.c_times_scalar(displacement, -1))
-    map.draw_these_reactions([d.reaction_id], false)
-    map.draw_these_beziers([d.bezier_id])
+    map.draw_these_reactions([ d.reaction_id ], false)
+    map.draw_these_beziers([ d.bezier_id ])
   }
   var redo_fn = function (d, displacement) {
     move_bezier(d.reaction_id, d.segment_id, d.bezier, d.bezier_id,
                 displacement)
-    map.draw_these_reactions([d.reaction_id], false)
-    map.draw_these_beziers([d.bezier_id])
+    map.draw_these_reactions([ d.reaction_id ], false)
+    map.draw_these_beziers([ d.bezier_id ])
   }
   return this._get_generic_drag(start_fn, drag_fn, end_fn, undo_fn, redo_fn,
                                 this.map.sel)
